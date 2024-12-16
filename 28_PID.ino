@@ -9,8 +9,8 @@
 #define MODE   2  // 0: serial plotter, 1: serial monitor, 2: evaluation
 
 // Event interval parameters
-#define _INTERVAL_DIST    ???    // distance sensor interval (unit: ms)
-#define _INTERVAL_SERVO   20     // servo interval (unit: ms)
+#define _INTERVAL_DIST    70    // distance sensor interval (unit: ms)
+#define _INTERVAL_SERVO   40     // servo interval (unit: ms)
 
 //////////////// DO NOT modify below section!! //////////////////////////    
 #define _INTERVAL_SERIAL  100    // serial interval (unit: ms)
@@ -18,21 +18,21 @@
 /////////////////////////////////////////////////////////////////////////
 
 // EMA filter configuration for the IR distance sensor
-#define _EMA_ALPHA ???    // EMA weight of new sample (range: 0 to 1)
+#define _EMA_ALPHA 0.9   // EMA weight of new sample (range: 0 to 1)
                           // Setting EMA to 1 effectively disables EMA filter
 
 // Servo adjustment - Set _DUTY_MAX, _NEU, _MIN with your own numbers
-#define _DUTY_MAX ??? // 2000
-#define _DUTY_NEU ??? // 1500
-#define _DUTY_MIN ??? // 1000
+#define _DUTY_MAX 1109    // 1118     baihad bol yurn mash l huurhun ajillaad shaajin.
+#define _DUTY_NEU 869    //  889
+#define _DUTY_MIN 585    // 580
 
-#define _SERVO_ANGLE_DIFF  ???  // Replace with |D - E| degree
-#define _SERVO_SPEED       ???  // servo speed 
+#define _SERVO_ANGLE_DIFF  40  // Replace with |D - E| degree
+#define _SERVO_SPEED       140  // servo speed 
 
 // PID parameters
-#define _KP ???   // proportional gain
-#define _KD ???   // derivative gain
-#define _KI ???   // integral gain
+#define _KP 2.0   // proportional gain
+#define _KD 38.0   // derivative gain
+#define _KI 2.4   // integral gain
 
 // global variables
 
@@ -119,7 +119,7 @@ void loop() {
     event_dist = false;
 
     // get a distance reading from the distance sensor
-    dist_filtered = volt_to_distance(ir_sensor_filtered(???, ???, 0));
+    dist_filtered = volt_to_distance(ir_sensor_filtered(20, 0.5, 0));
     dist_ema = _EMA_ALPHA * dist_filtered + (1.0 - _EMA_ALPHA) * dist_ema;
 
     // PID control logic
@@ -142,6 +142,9 @@ void loop() {
     pterm = _KP * error_current;
     dterm = _KD * (error_current - error_prev);
     iterm += _KI * error_current;
+
+    if (iterm > 44) iterm = 44;
+    if (iterm < -44) iterm = -44;
 
     control = pterm + dterm + iterm;
     error_prev = error_current;
@@ -212,9 +215,8 @@ void loop() {
 
 float volt_to_distance(int a_value)
 {
-  // Replace next line into your own equation
-  // return (6762.0 / (a_value - 9) - 4.0) * 10.0; 
-  return ???;
+  // Replace next line into your own equation based on calibration
+  return 960 + -5.15*a_value + 0.0101*a_value*a_value + -6.9E-06*a_value*a_value*a_value;
 }
 
 int compare(const void *a, const void *b) {
@@ -224,72 +226,25 @@ int compare(const void *a, const void *b) {
 unsigned int ir_sensor_filtered(unsigned int n, float position, int verbose)
 {
   // Eliminate spiky noise of an IR distance sensor by repeating measurement and taking a middle value
-  // n: number of measurement repetition
-  // position: the percentile of the sample to be taken (0.0 <= position <= 1.0)
-  // verbose: 0 - normal operation, 1 - observing the internal procedures, and 2 - calculating elapsed time.
-  // Example 1: ir_sensor_filtered(n, 0.5, 0) => return the median value among the n measured samples.
-  // Example 2: ir_sensor_filtered(n, 0.0, 0) => return the smallest value among the n measured samples.
-  // Example 3: ir_sensor_filtered(n, 1.0, 0) => return the largest value among the n measured samples.
-
-  // The output of Sharp infrared sensor includes lots of spiky noise.
-  // To eliminate such a spike, ir_sensor_filtered() performs the following two steps:
-  // Step 1. Repeat measurement n times and collect n * position smallest samples, where 0 <= postion <= 1.
-  // Step 2. Return the position'th sample after sorting the collected samples.
-
-  // returns 0, if any error occurs
-
   unsigned int *ir_val, ret_val;
-  unsigned int start_time;
- 
-  if (verbose >= 2)
-    start_time = millis(); 
 
   if ((n == 0) || (n > 100) || (position < 0.0) || (position > 1))
     return 0;
-    
+  
   if (position == 1.0)
     position = 0.999;
-
-  if (verbose == 1) {
-    Serial.print("n: "); Serial.print(n);
-    Serial.print(", position: "); Serial.print(position); 
-    Serial.print(", ret_idx: ");  Serial.println((unsigned int)(n * position)); 
-  }
 
   ir_val = (unsigned int *)malloc(sizeof(unsigned int) * n);
   if (ir_val == NULL)
     return 0;
 
-  if (verbose == 1)
-    Serial.print("IR:");
-  
   for (int i = 0; i < n; i++) {
     ir_val[i] = analogRead(PIN_IR);
-    if (verbose == 1) {
-        Serial.print(" ");
-        Serial.print(ir_val[i]);
-    }
   }
-
-  if (verbose == 1)
-    Serial.print  ("  => ");
 
   qsort(ir_val, n, sizeof(unsigned int), compare);
   ret_val = ir_val[(unsigned int)(n * position)];
-
-  if (verbose == 1) {
-    for (int i = 0; i < n; i++) {
-        Serial.print(" ");
-        Serial.print(ir_val[i]);
-    }
-    Serial.print(" :: ");
-    Serial.println(ret_val);
-  }
   free(ir_val);
 
-  if (verbose >= 2) {
-    Serial.print("Elapsed time: "); Serial.print(millis() - start_time); Serial.println("ms");
-  }
-  
   return ret_val;
 }
